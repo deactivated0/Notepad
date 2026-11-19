@@ -1,6 +1,6 @@
 use iced::highlighter;
-use iced::widget::{container, rich_text, scrollable, span, text, text_editor, Column};
-use iced::{Element, Font, Length, Padding};
+use iced::widget::{container, rich_text, row, scrollable, span, text, text_editor, Column};
+use iced::{Alignment, Element, Font, Length, Padding};
 
 use crate::app::{Message, NotepadApp};
 use crate::theme::{self, FluentPalette};
@@ -13,7 +13,7 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
     let font = app.settings.font_family.to_iced_font();
 
     if tab.formatted_view {
-        return formatted_preview(tab.content.text(), scaled_size, font, p);
+        return formatted_preview(&tab.content, scaled_size, font, p);
     }
 
     let wrapping = if app.settings.word_wrap {
@@ -55,17 +55,17 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
         .into()
 }
 
-/// Renders lightweight Markdown formatting matching Windows 11 Notepad's "Formatted" mode.
+/// Renders lightweight Markdown formatting matching Windows 11 Notepad's "Formatted" mode with zero document clones.
 fn formatted_preview<'a>(
-    raw: String,
+    content: &'a text_editor::Content,
     base_size: f32,
     base_font: Font,
     p: FluentPalette,
 ) -> Element<'a, Message> {
     let mut col = Column::new().spacing(8).width(Length::Fill);
 
-    for line in raw.lines() {
-        let trimmed = line.trim_end();
+    for line in content.lines() {
+        let trimmed = line.text.trim_end();
         if trimmed.is_empty() {
             col = col.push(container(text("")).height(Length::Fixed(base_size * 0.6)));
             continue;
@@ -131,22 +131,17 @@ fn formatted_preview<'a>(
                     })
                     .color(p.text_secondary),
             );
-        } else if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* "))
-        {
-            col = col.push(render_inline_spans(
-                &format!("  •  {item}"),
-                base_size,
-                base_font,
-                p,
-            ));
+        } else if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+            let bullet = text("  •  ").size(base_size).color(p.text_secondary);
+            let item_view = render_inline_spans(item, base_size, base_font, p);
+            col = col.push(row![bullet, item_view].spacing(0).align_y(Alignment::Center));
         } else if let Some(pos) = trimmed.find(". ") {
-            if trimmed[..pos].chars().all(|c| c.is_ascii_digit()) {
-                col = col.push(render_inline_spans(
-                    &format!("  {trimmed}"),
-                    base_size,
-                    base_font,
-                    p,
-                ));
+            if trimmed[..pos].bytes().all(|b| b.is_ascii_digit()) {
+                let num_str = &trimmed[..pos + 2];
+                let rest_str = &trimmed[pos + 2..];
+                let num_view = text(format!("  {num_str}")).size(base_size).color(p.text_secondary);
+                let rest_view = render_inline_spans(rest_str, base_size, base_font, p);
+                col = col.push(row![num_view, rest_view].spacing(0).align_y(Alignment::Center));
             } else {
                 col = col.push(render_inline_spans(trimmed, base_size, base_font, p));
             }
@@ -166,38 +161,32 @@ fn formatted_preview<'a>(
         .into()
 }
 
-/// Lightweight inline parser for `**bold**`, `*italic*`, and `[label](url)` spans.
+/// Zero-copy scanner for `**bold**`, `*italic*`, and `[label](url)` spans.
 fn render_inline_spans<'a>(
     line: &str,
     base_size: f32,
     base_font: Font,
     p: FluentPalette,
 ) -> Element<'a, Message> {
-    let mut spans = Vec::new();
-    let chars: Vec<char> = line.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-    let mut buf = String::new();
+    // Fast path: if the line contains no markdown control characters, emit a single text widget with zero span allocations
+    if !line.contains('*') && !line.contains('~') && !line.contains('`') && !line.contains('[') {
+        return text(line.to_string())
+            .size(base_size)
+            .font(base_font)
+            .color(p.text_primary)
+            .into();
+    }
 
-    let flush_plain = |buf: &mut String, spans: &mut Vec<iced::widget::text::Span<'a, (), Font>>| {
-        if !buf.is_empty() {
-            spans.push(
-                span(std::mem::take(buf))
-                    .size(base_size)
-                    .font(base_font)
-                    .color(p.text_primary),
-            );
-        }
-    };
+    let mut spans: Vec<iced::widget::text::Span<'a, (), Font>> = Vec::new();
+    let mut rest = line;
 
-    while i < len {
+    while !rest.is_empty() {
         // Bold: **text**
-        if i + 1 < len && chars[i] == '*' && chars[i + 1] == '*' {
-            if let Some(end) = find_double_star(&chars, i + 2) {
-                flush_plain(&mut buf, &mut spans);
-                let bold_text: String = chars[i + 2..end].iter().collect();
+        if let Some(after_open) = rest.strip_prefix("**") {
+            if let Some(close_idx) = after_open.find("**") {
+                let bold_text = &after_open[..close_idx];
                 spans.push(
-                    span(bold_text)
+                    span(bold_text.to_string())
                         .size(base_size)
                         .font(Font {
                             weight: iced::font::Weight::Bold,
@@ -205,18 +194,33 @@ fn render_inline_spans<'a>(
                         })
                         .color(p.text_primary),
                 );
-                i = end + 2;
+                rest = &after_open[close_idx + 2..];
+                continue;
+            }
+        }
+
+        // Strikethrough: ~~text~~
+        if let Some(after_open) = rest.strip_prefix("~~") {
+            if let Some(close_idx) = after_open.find("~~") {
+                let strike_text = &after_open[..close_idx];
+                spans.push(
+                    span(strike_text.to_string())
+                        .size(base_size)
+                        .font(base_font)
+                        .color(p.text_secondary)
+                        .strikethrough(true),
+                );
+                rest = &after_open[close_idx + 2..];
                 continue;
             }
         }
 
         // Italic: *text*
-        if chars[i] == '*' {
-            if let Some(end) = find_single_char(&chars, i + 1, '*') {
-                flush_plain(&mut buf, &mut spans);
-                let italic_text: String = chars[i + 1..end].iter().collect();
+        if let Some(after_open) = rest.strip_prefix('*') {
+            if let Some(close_idx) = after_open.find('*') {
+                let italic_text = &after_open[..close_idx];
                 spans.push(
-                    span(italic_text)
+                    span(italic_text.to_string())
                         .size(base_size)
                         .font(Font {
                             style: iced::font::Style::Italic,
@@ -224,101 +228,62 @@ fn render_inline_spans<'a>(
                         })
                         .color(p.text_primary),
                 );
-                i = end + 1;
-                continue;
-            }
-        }
-
-        // Strikethrough: ~~text~~
-        if i + 1 < len && chars[i] == '~' && chars[i + 1] == '~' {
-            if let Some(end) = find_double_tilde(&chars, i + 2) {
-                flush_plain(&mut buf, &mut spans);
-                let strike_text: String = chars[i + 2..end].iter().collect();
-                spans.push(
-                    span(strike_text)
-                        .size(base_size)
-                        .font(base_font)
-                        .color(p.text_secondary)
-                        .strikethrough(true),
-                );
-                i = end + 2;
+                rest = &after_open[close_idx + 1..];
                 continue;
             }
         }
 
         // Inline Code: `code`
-        if chars[i] == '`' {
-            if let Some(end) = find_single_char(&chars, i + 1, '`') {
-                flush_plain(&mut buf, &mut spans);
-                let code_text: String = chars[i + 1..end].iter().collect();
+        if let Some(after_open) = rest.strip_prefix('`') {
+            if let Some(close_idx) = after_open.find('`') {
+                let code_text = &after_open[..close_idx];
                 spans.push(
-                    span(code_text)
+                    span(code_text.to_string())
                         .size(base_size)
                         .font(Font::MONOSPACE)
                         .color(p.text_secondary),
                 );
-                i = end + 1;
+                rest = &after_open[close_idx + 1..];
                 continue;
             }
         }
 
         // Link: [label](url)
-        if chars[i] == '[' {
-            if let Some((label, after_idx)) = parse_link(&chars, i) {
-                flush_plain(&mut buf, &mut spans);
-                spans.push(
-                    span(label)
-                        .size(base_size)
-                        .font(base_font)
-                        .color(p.link)
-                        .underline(true),
-                );
-                i = after_idx;
-                continue;
+        if let Some(after_open) = rest.strip_prefix('[') {
+            if let Some(close_bracket) = after_open.find(']') {
+                let after_bracket = &after_open[close_bracket + 1..];
+                if after_bracket.starts_with('(') {
+                    if let Some(close_paren) = after_bracket.find(')') {
+                        let label = &after_open[..close_bracket];
+                        spans.push(
+                            span(label.to_string())
+                                .size(base_size)
+                                .font(base_font)
+                                .color(p.link)
+                                .underline(true),
+                        );
+                        rest = &after_bracket[close_paren + 1..];
+                        continue;
+                    }
+                }
             }
         }
 
-        buf.push(chars[i]);
-        i += 1;
-    }
+        // Consume plain text until next potential markdown character
+        let next_marker = rest[1..]
+            .find(|c| c == '*' || c == '~' || c == '`' || c == '[')
+            .map(|idx| idx + 1)
+            .unwrap_or(rest.len());
 
-    flush_plain(&mut buf, &mut spans);
+        let plain_segment = &rest[..next_marker];
+        spans.push(
+            span(plain_segment.to_string())
+                .size(base_size)
+                .font(base_font)
+                .color(p.text_primary),
+        );
+        rest = &rest[next_marker..];
+    }
 
     rich_text(spans).size(base_size).into()
-}
-
-fn find_double_star(chars: &[char], start: usize) -> Option<usize> {
-    let mut j = start;
-    while j + 1 < chars.len() {
-        if chars[j] == '*' && chars[j + 1] == '*' {
-            return Some(j);
-        }
-        j += 1;
-    }
-    None
-}
-
-fn find_double_tilde(chars: &[char], start: usize) -> Option<usize> {
-    let mut j = start;
-    while j + 1 < chars.len() {
-        if chars[j] == '~' && chars[j + 1] == '~' {
-            return Some(j);
-        }
-        j += 1;
-    }
-    None
-}
-
-fn find_single_char(chars: &[char], start: usize, target: char) -> Option<usize> {
-    (start..chars.len()).find(|&j| chars[j] == target)
-}
-
-fn parse_link(chars: &[char], start: usize) -> Option<(String, usize)> {
-    let close_bracket = find_single_char(chars, start + 1, ']')?;
-    if close_bracket + 1 >= chars.len() || chars[close_bracket + 1] != '(' {
-        return None;
-    }
-    let close_paren = find_single_char(chars, close_bracket + 2, ')')?;
-    let label: String = chars[start + 1..close_bracket].iter().collect();
-    Some((label, close_paren + 1))
 }

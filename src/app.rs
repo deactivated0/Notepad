@@ -98,6 +98,7 @@ pub struct NotepadApp {
     pub replace_query: String,
     pub find_match_case: bool,
     pub find_match_index: usize,
+    pub find_total_matches: std::cell::Cell<Option<usize>>,
 }
 
 impl NotepadApp {
@@ -120,6 +121,7 @@ impl NotepadApp {
             replace_query: String::new(),
             find_match_case: false,
             find_match_index: 0,
+            find_total_matches: std::cell::Cell::new(None),
         };
 
         let sys_theme_task = system::theme().map(Message::SystemThemeChanged);
@@ -181,10 +183,29 @@ impl NotepadApp {
             .clamp(8.0, 96.0)
     }
 
+    #[inline]
+    pub fn find_matches_count(&self) -> usize {
+        if let Some(count) = self.find_total_matches.get() {
+            count
+        } else {
+            let count = self.active_tab_ref().count_matches(&self.find_query, self.find_match_case);
+            self.find_total_matches.set(Some(count));
+            count
+        }
+    }
+
+    #[inline]
+    pub fn invalidate_find_matches(&self) {
+        self.find_total_matches.set(None);
+    }
+
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::EditorAction(action) => {
                 self.open_menu = None;
+                if action.is_edit() {
+                    self.invalidate_find_matches();
+                }
                 self.active_tab_mut().perform(action);
                 Task::none()
             }
@@ -192,6 +213,7 @@ impl NotepadApp {
             Message::NewTab => {
                 self.open_menu = None;
                 self.show_settings = false;
+                self.invalidate_find_matches();
                 let id = self.next_tab_id;
                 self.next_tab_id += 1;
                 self.tabs.push(Tab::new(id, "Untitled", ""));
@@ -202,14 +224,16 @@ impl NotepadApp {
             Message::SelectTab(idx) => {
                 self.open_menu = None;
                 self.show_settings = false;
-                if idx < self.tabs.len() {
+                if idx < self.tabs.len() && idx != self.active_tab {
                     self.active_tab = idx;
+                    self.invalidate_find_matches();
                 }
                 Task::none()
             }
 
             Message::CloseTab(idx) => {
                 self.open_menu = None;
+                self.invalidate_find_matches();
                 if self.tabs.len() <= 1 {
                     let id = self.next_tab_id;
                     self.next_tab_id += 1;
@@ -294,18 +318,21 @@ impl NotepadApp {
 
             Message::Undo => {
                 self.open_menu = None;
+                self.invalidate_find_matches();
                 self.active_tab_mut().undo();
                 Task::none()
             }
 
             Message::Redo => {
                 self.open_menu = None;
+                self.invalidate_find_matches();
                 self.active_tab_mut().redo();
                 Task::none()
             }
 
             Message::InsertTimeDate => {
                 self.open_menu = None;
+                self.invalidate_find_matches();
                 let stamp = chrono::Local::now().format("%H:%M %Y-%m-%d").to_string();
                 self.active_tab_mut().insert_text(&stamp);
                 Task::none()
@@ -313,6 +340,7 @@ impl NotepadApp {
 
             Message::ApplyFormat(fmt) => {
                 self.open_menu = None;
+                self.invalidate_find_matches();
                 self.active_tab_mut().apply_format(fmt);
                 Task::none()
             }
@@ -336,6 +364,7 @@ impl NotepadApp {
                 self.show_settings = false;
                 self.show_find = true;
                 self.show_replace = false;
+                self.invalidate_find_matches();
                 Task::none()
             }
 
@@ -344,6 +373,7 @@ impl NotepadApp {
                 self.show_settings = false;
                 self.show_find = true;
                 self.show_replace = true;
+                self.invalidate_find_matches();
                 Task::none()
             }
 
@@ -356,6 +386,7 @@ impl NotepadApp {
             Message::FindQueryChanged(q) => {
                 self.find_query = q;
                 self.find_match_index = 0;
+                self.invalidate_find_matches();
                 Task::none()
             }
 
@@ -367,32 +398,31 @@ impl NotepadApp {
             Message::ToggleFindMatchCase => {
                 self.find_match_case = !self.find_match_case;
                 self.find_match_index = 0;
+                self.invalidate_find_matches();
                 Task::none()
             }
 
             Message::FindNext => {
-                let query = self.find_query.clone();
-                let match_case = self.find_match_case;
-                let total = self.active_tab_ref().count_matches(&query, match_case);
+                let total = self.find_matches_count();
                 if total > 0 {
                     let idx = self.find_match_index % total;
-                    self.active_tab_mut().jump_to_match(&query, match_case, idx);
+                    let tab = &mut self.tabs[self.active_tab];
+                    tab.jump_to_match(&self.find_query, self.find_match_case, idx);
                     self.find_match_index = (idx + 1) % total;
                 }
                 Task::none()
             }
 
             Message::FindPrevious => {
-                let query = self.find_query.clone();
-                let match_case = self.find_match_case;
-                let total = self.active_tab_ref().count_matches(&query, match_case);
+                let total = self.find_matches_count();
                 if total > 0 {
                     let idx = if self.find_match_index == 0 {
                         total - 1
                     } else {
                         (self.find_match_index - 1) % total
                     };
-                    self.active_tab_mut().jump_to_match(&query, match_case, idx);
+                    let tab = &mut self.tabs[self.active_tab];
+                    tab.jump_to_match(&self.find_query, self.find_match_case, idx);
                     self.find_match_index = idx;
                 }
                 Task::none()
@@ -404,6 +434,7 @@ impl NotepadApp {
                 let match_case = self.find_match_case;
                 self.active_tab_mut()
                     .replace_occurrences(&query, &repl, match_case, false);
+                self.invalidate_find_matches();
                 Task::none()
             }
 
@@ -413,6 +444,7 @@ impl NotepadApp {
                 let match_case = self.find_match_case;
                 self.active_tab_mut()
                     .replace_occurrences(&query, &repl, match_case, true);
+                self.invalidate_find_matches();
                 Task::none()
             }
 
@@ -698,7 +730,7 @@ fn detect_initial_dark_mode() -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn detect_desktop_dark_mode() -> bool {
-    // 1. Environment variable check
+    // 1. Environment variable check (instant)
     if let Ok(gtk_theme) = std::env::var("GTK_THEME") {
         let lower = gtk_theme.to_lowercase();
         if lower.contains("dark") {
@@ -706,45 +738,7 @@ fn detect_desktop_dark_mode() -> bool {
         }
     }
 
-    // 2. Portal / GSettings via gsettings
-    if let Ok(output) = std::process::Command::new("gsettings")
-        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.contains("prefer-dark") {
-            return true;
-        }
-        if stdout.contains("prefer-light") {
-            return false;
-        }
-    }
-
-    // 3. Freedesktop Portal settings via gdbus
-    if let Ok(output) = std::process::Command::new("gdbus")
-        .args([
-            "call",
-            "--session",
-            "--dest",
-            "org.freedesktop.portal.Desktop",
-            "--object-path",
-            "/org/freedesktop/portal/desktop",
-            "--method",
-            "org.freedesktop.portal.Settings.Read",
-            "org.freedesktop.appearance",
-            "color-scheme",
-        ])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.contains("uint32 1") || stdout.contains("<1>") {
-            return true;
-        } else if stdout.contains("uint32 2") || stdout.contains("<2>") {
-            return false;
-        }
-    }
-
-    // 4. GTK config files (~/.config/gtk-4.0/settings.ini, ~/.config/gtk-3.0/settings.ini)
+    // 2. GTK config files (~/.config/gtk-4.0/settings.ini, ~/.config/gtk-3.0/settings.ini) (instant file read, ~0.005ms)
     if let Some(config_dir) = dirs::config_dir() {
         for gtk_ver in &["gtk-4.0", "gtk-3.0"] {
             let path = config_dir.join(gtk_ver).join("settings.ini");
@@ -765,13 +759,51 @@ fn detect_desktop_dark_mode() -> bool {
             }
         }
 
-        // 5. KDE globals (~/.config/kdeglobals)
+        // 3. KDE globals (~/.config/kdeglobals)
         let kde_globals = config_dir.join("kdeglobals");
         if let Ok(content) = std::fs::read_to_string(kde_globals) {
             let lower = content.to_lowercase();
             if lower.contains("breezedark") || lower.contains("color-scheme=dark") {
                 return true;
             }
+        }
+    }
+
+    // 4. Portal / GSettings via gsettings (sub-process fallback)
+    if let Ok(output) = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if stdout.contains("prefer-dark") {
+            return true;
+        }
+        if stdout.contains("prefer-light") {
+            return false;
+        }
+    }
+
+    // 5. Freedesktop Portal settings via gdbus (sub-process fallback)
+    if let Ok(output) = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.portal.Desktop",
+            "--object-path",
+            "/org/freedesktop/portal/desktop",
+            "--method",
+            "org.freedesktop.portal.Settings.Read",
+            "org.freedesktop.appearance",
+            "color-scheme",
+        ])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if stdout.contains("uint32 1") || stdout.contains("<1>") {
+            return true;
+        } else if stdout.contains("uint32 2") || stdout.contains("<2>") {
+            return false;
         }
     }
 

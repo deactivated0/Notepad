@@ -168,8 +168,7 @@ fn menu_sep<'a>(p: FluentPalette) -> Element<'a, Message> {
 
 /// Floating Windows 11 Fluent Find & Replace bar anchored top-right inside editor.
 pub fn find_replace_bar<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
-    let tab = app.active_tab_ref();
-    let total_matches = tab.count_matches(&app.find_query, app.find_match_case);
+    let total_matches = app.find_matches_count();
     let match_status = if app.find_query.is_empty() {
         String::new()
     } else if total_matches == 0 {
