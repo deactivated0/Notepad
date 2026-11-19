@@ -38,22 +38,22 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
 
         let dirty_or_close: Element<'a, Message> = if tab.is_dirty {
             button(
-                container(text("•").size(16).color(p.text_secondary))
-                    .center_x(20)
-                    .center_y(20),
+                container(text("●").size(8.0).color(p.text_secondary))
+                    .center_x(22)
+                    .center_y(22),
             )
             .padding(0)
-            .style(theme::ghost_button(p))
+            .style(theme::tab_close_button(p))
             .on_press(Message::CloseTab(idx))
             .into()
         } else {
             button(
-                container(icons::close(11.0, p.text_secondary))
-                    .center_x(20)
-                    .center_y(20),
+                container(icons::close(10.0, p.text_secondary))
+                    .center_x(22)
+                    .center_y(22),
             )
             .padding(0)
-            .style(theme::ghost_button(p))
+            .style(theme::tab_close_button(p))
             .on_press(Message::CloseTab(idx))
             .into()
         };
@@ -134,7 +134,7 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let min_btn = button(
-            container(icons::minimize(11.0, p.text_primary))
+            container(icons::minimize(12.0, p.text_primary))
                 .center_x(46)
                 .center_y(38),
         )
@@ -143,7 +143,7 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
         .on_press(Message::MinimizeWindow);
 
         let max_btn = button(
-            container(icons::maximize(11.0, p.text_primary))
+            container(icons::maximize(12.0, p.text_primary))
                 .center_x(46)
                 .center_y(38),
         )
@@ -152,7 +152,7 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
         .on_press(Message::MaximizeWindow);
 
         let close_btn = button(
-            container(icons::close(11.0, p.text_primary))
+            container(icons::close(12.0, p.text_primary))
                 .center_x(46)
                 .center_y(38),
         )

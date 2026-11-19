@@ -13,17 +13,17 @@ const PLUS_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
   <line x1="3" y1="8" x2="13" y2="8"/>
 </svg>"##;
 
-const CLOSE_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
-  <line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/>
-  <line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/>
+const CLOSE_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round">
+  <line x1="2" y1="2" x2="10" y2="10"/>
+  <line x1="10" y1="2" x2="2" y2="10"/>
 </svg>"##;
 
-const MINIMIZE_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
-  <line x1="0.5" y1="5" x2="9.5" y2="5"/>
+const MINIMIZE_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12">
+  <rect x="1" y="5.3" width="10" height="1.4" rx="0.3" fill="currentColor"/>
 </svg>"##;
 
-const MAXIMIZE_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1">
-  <rect x="1" y="1" width="8" height="8" rx="1"/>
+const MAXIMIZE_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2">
+  <rect x="1.5" y="1.5" width="9" height="9" rx="0.5"/>
 </svg>"##;
 
 const LIST_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">

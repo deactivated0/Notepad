@@ -1,4 +1,4 @@
-use iced::widget::{button, container, rule, text_editor, text_input};
+use iced::widget::{button, container, pick_list, rule, text_editor, text_input, toggler};
 use iced::{Background, Border, Color, Shadow, Theme, Vector};
 use serde::{Deserialize, Serialize};
 
@@ -176,11 +176,17 @@ impl FluentPalette {
     }
 
     pub fn iced_theme(self) -> Theme {
-        if self.is_dark {
-            Theme::Dark
-        } else {
-            Theme::Light
-        }
+        Theme::custom(
+            String::from(if self.is_dark { "Monochrome Dark" } else { "Monochrome Light" }),
+            iced::theme::Palette {
+                background: self.editor_bg,
+                text: self.text_primary,
+                primary: self.accent,
+                success: Color::from_rgb8(0x10, 0x7C, 0x10),
+                warning: Color::from_rgb8(0x9D, 0x5D, 0x00),
+                danger: Color::from_rgb8(0xC4, 0x2B, 0x1C),
+            },
+        )
     }
 }
 
@@ -390,25 +396,148 @@ pub fn statusbar_button(p: FluentPalette) -> impl Fn(&Theme, button::Status) -> 
     }
 }
 
-pub fn accent_button(p: FluentPalette) -> impl Fn(&Theme, button::Status) -> button::Style {
+pub fn tab_close_button(p: FluentPalette) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |_, status| {
-        let bg = match status {
-            button::Status::Hovered => Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.9),
-            button::Status::Pressed => Color::from_rgba(p.accent.r, p.accent.g, p.accent.b, 0.8),
-            _ => p.accent,
+        let (bg, text_color) = match status {
+            button::Status::Hovered => (Some(Background::Color(p.hover_bg)), p.text_primary),
+            button::Status::Pressed => (Some(Background::Color(p.pressed_bg)), p.text_primary),
+            _ => (None, p.text_secondary),
         };
         button::Style {
-            background: Some(Background::Color(bg)),
-            text_color: if p.is_dark {
-                Color::from_rgb8(0x10, 0x10, 0x10)
-            } else {
-                Color::WHITE
-            },
+            background: bg,
+            text_color,
             border: Border {
                 radius: 4.0.into(),
                 ..Default::default()
             },
             ..Default::default()
+        }
+    }
+}
+
+pub fn accent_button(p: FluentPalette) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_, status| {
+        let (bg, text_color) = match status {
+            button::Status::Hovered => (
+                if p.is_dark {
+                    Color::from_rgb8(0xFF, 0xFF, 0xFF)
+                } else {
+                    Color::from_rgb8(0x05, 0x05, 0x05)
+                },
+                if p.is_dark {
+                    Color::from_rgb8(0x10, 0x10, 0x10)
+                } else {
+                    Color::WHITE
+                },
+            ),
+            button::Status::Pressed => (
+                if p.is_dark {
+                    Color::from_rgb8(0xCC, 0xCC, 0xCC)
+                } else {
+                    Color::from_rgb8(0x33, 0x33, 0x33)
+                },
+                if p.is_dark {
+                    Color::from_rgb8(0x10, 0x10, 0x10)
+                } else {
+                    Color::WHITE
+                },
+            ),
+            _ => (
+                p.accent,
+                if p.is_dark {
+                    Color::from_rgb8(0x10, 0x10, 0x10)
+                } else {
+                    Color::WHITE
+                },
+            ),
+        };
+        button::Style {
+            background: Some(Background::Color(bg)),
+            text_color,
+            border: Border {
+                radius: 4.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+}
+
+pub fn fluent_toggler(p: FluentPalette) -> impl Fn(&Theme, toggler::Status) -> toggler::Style {
+    move |_, status| {
+        let is_toggled = match status {
+            toggler::Status::Active { is_toggled } => is_toggled,
+            toggler::Status::Hovered { is_toggled } => is_toggled,
+            toggler::Status::Disabled { is_toggled } => is_toggled,
+        };
+        let is_hovered = matches!(status, toggler::Status::Hovered { .. });
+
+        if is_toggled {
+            let pill_color = if is_hovered {
+                if p.is_dark {
+                    Color::from_rgb8(0xFF, 0xFF, 0xFF)
+                } else {
+                    Color::from_rgb8(0x05, 0x05, 0x05)
+                }
+            } else {
+                p.accent
+            };
+            let knob_color = if p.is_dark {
+                Color::from_rgb8(0x10, 0x10, 0x10)
+            } else {
+                Color::from_rgb8(0xFF, 0xFF, 0xFF)
+            };
+
+            toggler::Style {
+                background: Background::Color(pill_color),
+                background_border_width: 0.0,
+                background_border_color: Color::TRANSPARENT,
+                foreground: Background::Color(knob_color),
+                foreground_border_width: 0.0,
+                foreground_border_color: Color::TRANSPARENT,
+                text_color: Some(p.text_primary),
+                border_radius: None,
+                padding_ratio: 0.08,
+            }
+        } else {
+            let border_color = if is_hovered { p.text_secondary } else { p.border };
+            let knob_color = if is_hovered { p.text_primary } else { p.text_secondary };
+
+            toggler::Style {
+                background: Background::Color(Color::TRANSPARENT),
+                background_border_width: 1.0,
+                background_border_color: border_color,
+                foreground: Background::Color(knob_color),
+                foreground_border_width: 0.0,
+                foreground_border_color: Color::TRANSPARENT,
+                text_color: Some(p.text_primary),
+                border_radius: None,
+                padding_ratio: 0.08,
+            }
+        }
+    }
+}
+
+pub fn fluent_pick_list(
+    p: FluentPalette,
+) -> impl Fn(&Theme, pick_list::Status) -> pick_list::Style {
+    move |_, status| {
+        let border_color = match status {
+            pick_list::Status::Hovered => p.overlay_border,
+            pick_list::Status::Opened { .. } => p.accent,
+            pick_list::Status::Active => p.border,
+        };
+
+        pick_list::Style {
+            text_color: p.text_primary,
+            placeholder_color: p.text_muted,
+            handle_color: p.text_secondary,
+            background: Background::Color(p.input_bg),
+            border: Border {
+                color: border_color,
+                width: 1.0,
+                radius: 4.0.into(),
+            },
         }
     }
 }

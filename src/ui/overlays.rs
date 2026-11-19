@@ -280,7 +280,8 @@ pub fn settings_flyout<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a,
         "App theme",
         pick_list(AppTheme::ALL, Some(app.settings.theme), Message::SetTheme)
             .text_size(12.5)
-            .padding(Padding::from([4, 10])),
+            .padding(Padding::from([4, 10]))
+            .style(theme::fluent_pick_list(p)),
         p,
     );
 
@@ -292,7 +293,8 @@ pub fn settings_flyout<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a,
             Message::SetFontFamily,
         )
         .text_size(12.5)
-        .padding(Padding::from([4, 10])),
+        .padding(Padding::from([4, 10]))
+        .style(theme::fluent_pick_list(p)),
         p,
     );
 
@@ -316,26 +318,33 @@ pub fn settings_flyout<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a,
 
     let wrap_row = flyout_setting_row(
         "Word wrap",
-        toggler(app.settings.word_wrap).on_toggle(|_| Message::ToggleWordWrap),
+        toggler(app.settings.word_wrap)
+            .on_toggle(|_| Message::ToggleWordWrap)
+            .style(theme::fluent_toggler(p)),
         p,
     );
 
     let syntax_row = flyout_setting_row(
         "Syntax highlighting",
-        toggler(app.settings.syntax_highlighting).on_toggle(|_| Message::ToggleSyntaxHighlighting),
+        toggler(app.settings.syntax_highlighting)
+            .on_toggle(|_| Message::ToggleSyntaxHighlighting)
+            .style(theme::fluent_toggler(p)),
         p,
     );
 
     let toolbar_row = flyout_setting_row(
         "Formatting toolbar",
         toggler(app.settings.show_formatting_toolbar)
-            .on_toggle(|_| Message::ToggleFormattingToolbar),
+            .on_toggle(|_| Message::ToggleFormattingToolbar)
+            .style(theme::fluent_toggler(p)),
         p,
     );
 
     let status_row = flyout_setting_row(
         "Status bar",
-        toggler(app.settings.show_status_bar).on_toggle(|_| Message::ToggleStatusBar),
+        toggler(app.settings.show_status_bar)
+            .on_toggle(|_| Message::ToggleStatusBar)
+            .style(theme::fluent_toggler(p)),
         p,
     );
 
@@ -344,7 +353,6 @@ pub fn settings_flyout<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a,
             weight: iced::font::Weight::Medium,
             ..iced::Font::DEFAULT
         }).color(p.text_secondary),
-        text("Built with Rust & Iced 0.14").size(11).color(p.text_muted),
     ]
     .spacing(2)
     .padding(Padding::from([8, 14]));
