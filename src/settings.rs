@@ -108,7 +108,9 @@ impl UserSettings {
         {
             if let Some(path) = Self::config_path() {
                 if let Some(parent) = path.parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                    if !parent.exists() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
                 }
                 let _ = std::fs::write(path, json);
             }

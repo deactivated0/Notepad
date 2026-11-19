@@ -79,7 +79,8 @@ pub async fn open_file_dialog() -> Result<LoadedFile, IoError> {
 
     let name = handle.file_name();
     let bytes = handle.read().await;
-    let contents = String::from_utf8_lossy(&bytes).into_owned();
+    let contents = String::from_utf8(bytes)
+        .unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned());
 
     #[cfg(not(target_arch = "wasm32"))]
     let path = Some(handle.path().to_path_buf());
@@ -103,7 +104,8 @@ pub async fn read_path(path: PathBuf) -> Result<LoadedFile, IoError> {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Untitled.txt".to_string());
-    let contents = String::from_utf8_lossy(&bytes).into_owned();
+    let contents = String::from_utf8(bytes)
+        .unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned());
     Ok(LoadedFile {
         path: Some(path),
         name,
