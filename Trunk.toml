@@ -1,0 +1,12 @@
+[build]
+target = "index.html"
+dist = "dist"
+release = false
+
+[watch]
+watch = ["src", "index.html", "Cargo.toml"]
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 8080
+open = true

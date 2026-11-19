@@ -1,0 +1,79 @@
+[package]
+name = "notepad"
+version = "1.0.0"
+edition = "2024"
+description = "Fast, cross-platform Notepad built with Rust and Iced (Linux Wayland/X11, Windows, macOS, WebAssembly)"
+license = "MIT"
+
+[dependencies]
+# Cross-platform async file dialogs (Windows, macOS, Linux XDG Portal/GTK, WASM32)
+rfd = "0.15"
+
+# Lightweight local time formatting for Edit -> Time/Date (F5)
+chrono = { version = "0.4", default-features = false, features = ["clock", "wasmbind"] }
+
+# Settings persistence (config file on Native, localStorage on WASM)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Native desktop targets: Linux (Wayland + X11), Windows 10/11, macOS
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+iced = { version = "0.14.0", default-features = false, features = [
+    "wgpu",
+    "tiny-skia",
+    "tokio",
+    "wayland",
+    "x11",
+    "linux-theme-detection",
+    "svg",
+    "highlighter",
+    "crisp",
+    "web-colors",
+    "advanced",
+    "image",
+] }
+tokio = { version = "1", features = ["fs", "rt-multi-thread"] }
+dirs = "6"
+
+# WebAssembly target: Modern browsers (WebGL2 / WebGPU + tiny-skia fallback)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { version = "0.14.0", default-features = false, features = [
+    "webgl",
+    "wgpu",
+    "tiny-skia",
+    "svg",
+    "highlighter",
+    "web-colors",
+] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = [
+    "Blob",
+    "BlobPropertyBag",
+    "Document",
+    "Element",
+    "HtmlAnchorElement",
+    "MediaQueryList",
+    "Storage",
+    "Url",
+    "Window",
+] }
+js-sys = "0.3"
+
+# Aggressive native release optimization: maximum speed, minimal binary size
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+# Ultra-compact WebAssembly release profile
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
