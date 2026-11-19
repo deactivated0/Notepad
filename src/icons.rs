@@ -1,4 +1,4 @@
-use iced::widget::{image, svg, Image, Svg};
+use iced::widget::{Image, Svg, image, svg};
 use iced::{Color, Theme};
 
 const NOTEPAD_ICON_PNG: &[u8] = include_bytes!("../assets/icon_128.png");

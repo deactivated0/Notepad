@@ -1,5 +1,5 @@
 use iced::highlighter;
-use iced::widget::{container, rich_text, row, scrollable, span, text, text_editor, Column};
+use iced::widget::{Column, container, rich_text, row, scrollable, span, text, text_editor};
 use iced::{Alignment, Element, Font, Length, Padding};
 
 use crate::app::{Message, NotepadApp};
@@ -131,17 +131,30 @@ fn formatted_preview<'a>(
                     })
                     .color(p.text_secondary),
             );
-        } else if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+        } else if let Some(item) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
             let bullet = text("  •  ").size(base_size).color(p.text_secondary);
             let item_view = render_inline_spans(item, base_size, base_font, p);
-            col = col.push(row![bullet, item_view].spacing(0).align_y(Alignment::Center));
+            col = col.push(
+                row![bullet, item_view]
+                    .spacing(0)
+                    .align_y(Alignment::Center),
+            );
         } else if let Some(pos) = trimmed.find(". ") {
             if trimmed[..pos].bytes().all(|b| b.is_ascii_digit()) {
                 let num_str = &trimmed[..pos + 2];
                 let rest_str = &trimmed[pos + 2..];
-                let num_view = text(format!("  {num_str}")).size(base_size).color(p.text_secondary);
+                let num_view = text(format!("  {num_str}"))
+                    .size(base_size)
+                    .color(p.text_secondary);
                 let rest_view = render_inline_spans(rest_str, base_size, base_font, p);
-                col = col.push(row![num_view, rest_view].spacing(0).align_y(Alignment::Center));
+                col = col.push(
+                    row![num_view, rest_view]
+                        .spacing(0)
+                        .align_y(Alignment::Center),
+                );
             } else {
                 col = col.push(render_inline_spans(trimmed, base_size, base_font, p));
             }
@@ -271,7 +284,7 @@ fn render_inline_spans<'a>(
 
         // Consume plain text until next potential markdown character
         let next_marker = rest[1..]
-            .find(|c| c == '*' || c == '~' || c == '`' || c == '[')
+            .find(['*', '~', '`', '['])
             .map(|idx| idx + 1)
             .unwrap_or(rest.len());
 

@@ -202,8 +202,8 @@ fn trigger_browser_download(filename: &str, contents: &str) -> Result<(), String
     let bag = BlobPropertyBag::new();
     bag.set_type(mime_type_for_filename(filename));
 
-    let blob = Blob::new_with_str_sequence_and_options(&parts, &bag)
-        .map_err(|e| format!("{e:?}"))?;
+    let blob =
+        Blob::new_with_str_sequence_and_options(&parts, &bag).map_err(|e| format!("{e:?}"))?;
     let url = Url::create_object_url_with_blob(&blob).map_err(|e| format!("{e:?}"))?;
 
     let anchor: HtmlAnchorElement = document

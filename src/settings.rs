@@ -11,10 +11,8 @@ pub enum EditorFontFamily {
 }
 
 impl EditorFontFamily {
-    pub const ALL: [EditorFontFamily; 2] = [
-        EditorFontFamily::Monospace,
-        EditorFontFamily::SansSerif,
-    ];
+    pub const ALL: [EditorFontFamily; 2] =
+        [EditorFontFamily::Monospace, EditorFontFamily::SansSerif];
 
     pub fn label(self) -> &'static str {
         match self {

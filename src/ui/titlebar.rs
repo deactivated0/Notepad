@@ -1,4 +1,4 @@
-use iced::widget::{button, container, mouse_area, row, space, text, Row};
+use iced::widget::{Row, button, container, mouse_area, row, space, text};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::app::{Message, NotepadApp};

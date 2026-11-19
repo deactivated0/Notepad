@@ -1,4 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![allow(
+    clippy::collapsible_if,
+    clippy::if_same_then_else,
+    clippy::extra_unused_lifetimes,
+    clippy::manual_is_ascii_check
+)]
 
 mod app;
 mod document;
@@ -8,7 +14,7 @@ mod settings;
 mod theme;
 mod ui;
 
-use iced::{window, Size};
+use iced::{Size, window};
 
 use crate::app::NotepadApp;
 

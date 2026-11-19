@@ -1,5 +1,5 @@
 use iced::widget::{column, rule, stack, text_editor};
-use iced::{event, keyboard, system, window, Element, Event, Length, Subscription, Task, Theme};
+use iced::{Element, Event, Length, Subscription, Task, Theme, event, keyboard, system, window};
 
 use crate::document::{FormatAction, Tab};
 use crate::io::{self, IoError, LoadedFile, SavedFile};
@@ -188,7 +188,9 @@ impl NotepadApp {
         if let Some(count) = self.find_total_matches.get() {
             count
         } else {
-            let count = self.active_tab_ref().count_matches(&self.find_query, self.find_match_case);
+            let count = self
+                .active_tab_ref()
+                .count_matches(&self.find_query, self.find_match_case);
             self.find_total_matches.set(Some(count));
             count
         }
@@ -538,7 +540,7 @@ impl NotepadApp {
                 {
                     match mode {
                         iced::theme::Mode::Dark => self.system_dark = true,
-                        iced::theme::Mode::Light => false,
+                        iced::theme::Mode::Light => self.system_dark = false,
                         iced::theme::Mode::None => {
                             self.system_dark = detect_initial_dark_mode();
                         }
@@ -560,7 +562,8 @@ impl NotepadApp {
             }
 
             Message::DecreaseBaseFontSize => {
-                self.settings.base_font_size = self.settings.base_font_size.saturating_sub(1).max(8);
+                self.settings.base_font_size =
+                    self.settings.base_font_size.saturating_sub(1).max(8);
                 self.settings.save();
                 Task::none()
             }
@@ -569,8 +572,10 @@ impl NotepadApp {
                 window::oldest().then(|id| id.map(window::drag).unwrap_or_else(Task::none))
             }
 
-            Message::MinimizeWindow => window::oldest()
-                .then(|id| id.map(|id| window::minimize(id, true)).unwrap_or_else(Task::none)),
+            Message::MinimizeWindow => window::oldest().then(|id| {
+                id.map(|id| window::minimize(id, true))
+                    .unwrap_or_else(Task::none)
+            }),
 
             Message::MaximizeWindow => window::oldest()
                 .then(|id| id.map(window::toggle_maximize).unwrap_or_else(Task::none)),
@@ -590,12 +595,30 @@ impl NotepadApp {
                     if let keyboard::Key::Character(ref ch) = key {
                         if modifiers.alt() {
                             match ch.as_str() {
-                                "1" => return self.update(Message::ApplyFormat(FormatAction::Heading1)),
-                                "2" => return self.update(Message::ApplyFormat(FormatAction::Heading2)),
-                                "3" => return self.update(Message::ApplyFormat(FormatAction::Heading3)),
-                                "4" => return self.update(Message::ApplyFormat(FormatAction::Heading4)),
-                                "5" => return self.update(Message::ApplyFormat(FormatAction::Heading5)),
-                                "6" => return self.update(Message::ApplyFormat(FormatAction::Heading6)),
+                                "1" => {
+                                    return self
+                                        .update(Message::ApplyFormat(FormatAction::Heading1));
+                                }
+                                "2" => {
+                                    return self
+                                        .update(Message::ApplyFormat(FormatAction::Heading2));
+                                }
+                                "3" => {
+                                    return self
+                                        .update(Message::ApplyFormat(FormatAction::Heading3));
+                                }
+                                "4" => {
+                                    return self
+                                        .update(Message::ApplyFormat(FormatAction::Heading4));
+                                }
+                                "5" => {
+                                    return self
+                                        .update(Message::ApplyFormat(FormatAction::Heading5));
+                                }
+                                "6" => {
+                                    return self
+                                        .update(Message::ApplyFormat(FormatAction::Heading6));
+                                }
                                 _ => {}
                             }
                         }
@@ -614,9 +637,15 @@ impl NotepadApp {
                             "h" | "H" => return self.update(Message::OpenReplace),
                             "z" | "Z" => return self.update(Message::Undo),
                             "y" | "Y" => return self.update(Message::Redo),
-                            "b" | "B" => return self.update(Message::ApplyFormat(FormatAction::Bold)),
-                            "i" | "I" => return self.update(Message::ApplyFormat(FormatAction::Italic)),
-                            "k" | "K" => return self.update(Message::ApplyFormat(FormatAction::Link)),
+                            "b" | "B" => {
+                                return self.update(Message::ApplyFormat(FormatAction::Bold));
+                            }
+                            "i" | "I" => {
+                                return self.update(Message::ApplyFormat(FormatAction::Italic));
+                            }
+                            "k" | "K" => {
+                                return self.update(Message::ApplyFormat(FormatAction::Link));
+                            }
                             "=" | "+" => return self.update(Message::ZoomIn),
                             "-" => return self.update(Message::ZoomOut),
                             "0" => return self.update(Message::ZoomReset),

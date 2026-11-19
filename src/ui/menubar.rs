@@ -31,49 +31,49 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
         let h6_btn = fmt_btn(text("H6").size(11.5), FormatAction::Heading6, p);
 
         let bold_btn = fmt_btn(
-            text("B")
-                .size(13.0)
-                .font(Font {
-                    weight: iced::font::Weight::Bold,
-                    ..Font::DEFAULT
-                }),
+            text("B").size(13.0).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }),
             FormatAction::Bold,
             p,
         );
         let italic_btn = fmt_btn(
-            text("I")
-                .size(13.0)
-                .font(Font {
-                    style: iced::font::Style::Italic,
-                    ..Font::DEFAULT
-                }),
+            text("I").size(13.0).font(Font {
+                style: iced::font::Style::Italic,
+                ..Font::DEFAULT
+            }),
             FormatAction::Italic,
             p,
         );
         let strike_btn = fmt_btn(
-            text("S̶")
-                .size(12.5)
-                .font(Font {
-                    weight: iced::font::Weight::Bold,
-                    ..Font::DEFAULT
-                }),
+            text("S̶").size(12.5).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }),
             FormatAction::Strikethrough,
             p,
         );
 
-        let list_btn = fmt_btn(icons::list(14.0, p.text_primary), FormatAction::BulletList, p);
+        let list_btn = fmt_btn(
+            icons::list(14.0, p.text_primary),
+            FormatAction::BulletList,
+            p,
+        );
         let num_btn = fmt_btn(
-            text("1.")
-                .size(12.0)
-                .font(Font {
-                    weight: iced::font::Weight::Bold,
-                    ..Font::DEFAULT
-                }),
+            text("1.").size(12.0).font(Font {
+                weight: iced::font::Weight::Bold,
+                ..Font::DEFAULT
+            }),
             FormatAction::NumberedList,
             p,
         );
 
-        let code_btn = fmt_btn(text("</>").size(11.0).font(Font::MONOSPACE), FormatAction::Code, p);
+        let code_btn = fmt_btn(
+            text("</>").size(11.0).font(Font::MONOSPACE),
+            FormatAction::Code,
+            p,
+        );
         let link_btn = fmt_btn(icons::link(14.0, p.text_primary), FormatAction::Link, p);
         let clear_btn = fmt_btn(text("Aₓ").size(12.0), FormatAction::ClearFormatting, p);
 

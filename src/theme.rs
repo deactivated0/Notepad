@@ -177,7 +177,11 @@ impl FluentPalette {
 
     pub fn iced_theme(self) -> Theme {
         Theme::custom(
-            String::from(if self.is_dark { "Monochrome Dark" } else { "Monochrome Light" }),
+            String::from(if self.is_dark {
+                "Monochrome Dark"
+            } else {
+                "Monochrome Light"
+            }),
             iced::theme::Palette {
                 background: self.editor_bg,
                 text: self.text_primary,
@@ -500,8 +504,16 @@ pub fn fluent_toggler(p: FluentPalette) -> impl Fn(&Theme, toggler::Status) -> t
                 padding_ratio: 0.08,
             }
         } else {
-            let border_color = if is_hovered { p.text_secondary } else { p.border };
-            let knob_color = if is_hovered { p.text_primary } else { p.text_secondary };
+            let border_color = if is_hovered {
+                p.text_secondary
+            } else {
+                p.border
+            };
+            let knob_color = if is_hovered {
+                p.text_primary
+            } else {
+                p.text_secondary
+            };
 
             toggler::Style {
                 background: Background::Color(Color::TRANSPARENT),

@@ -293,10 +293,14 @@ impl Tab {
                     }
                 }
                 text_editor::Action::Edit(text_editor::Edit::Backspace) => {
-                    has_selection || !matches!(self.last_edit, LastEditOp::Backspace) || self.undo_stack.is_empty()
+                    has_selection
+                        || !matches!(self.last_edit, LastEditOp::Backspace)
+                        || self.undo_stack.is_empty()
                 }
                 text_editor::Action::Edit(text_editor::Edit::Delete) => {
-                    has_selection || !matches!(self.last_edit, LastEditOp::Delete) || self.undo_stack.is_empty()
+                    has_selection
+                        || !matches!(self.last_edit, LastEditOp::Delete)
+                        || self.undo_stack.is_empty()
                 }
                 _ => true,
             };
@@ -549,7 +553,10 @@ impl Tab {
                     .lines()
                     .map(|l| {
                         let trimmed = l.trim_start();
-                        if let Some(rest) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+                        if let Some(rest) = trimmed
+                            .strip_prefix("- ")
+                            .or_else(|| trimmed.strip_prefix("* "))
+                        {
                             rest.to_string()
                         } else {
                             format!("- {trimmed}")
@@ -575,7 +582,10 @@ impl Tab {
             .unwrap_or_default();
 
         let trimmed = line_text.trim_start();
-        let new_line = if let Some(rest) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+        let new_line = if let Some(rest) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
             rest.to_string()
         } else if trimmed.is_empty() {
             "- ".to_string()
@@ -760,11 +770,12 @@ impl Tab {
                     std::sync::Arc::new(replacement),
                 )));
         } else if !selected.is_empty() {
-            let replacement = if selected.starts_with('`') && selected.ends_with('`') && selected.len() >= 2 {
-                selected[1..selected.len() - 1].to_string()
-            } else {
-                format!("`{selected}`")
-            };
+            let replacement =
+                if selected.starts_with('`') && selected.ends_with('`') && selected.len() >= 2 {
+                    selected[1..selected.len() - 1].to_string()
+                } else {
+                    format!("`{selected}`")
+                };
             self.content
                 .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
                     std::sync::Arc::new(replacement),
@@ -995,7 +1006,10 @@ fn strip_markdown_formatting(input: &str) -> String {
 
         let trimmed = line.trim_start();
         let stripped = strip_heading_prefix(trimmed);
-        let stripped = if let Some(rest) = stripped.strip_prefix("- ").or_else(|| stripped.strip_prefix("* ")) {
+        let stripped = if let Some(rest) = stripped
+            .strip_prefix("- ")
+            .or_else(|| stripped.strip_prefix("* "))
+        {
             rest
         } else if let Some(pos) = stripped.find(". ") {
             if stripped[..pos].bytes().all(|b| b.is_ascii_digit()) {
@@ -1080,8 +1094,14 @@ mod tests {
     fn test_strip_heading_prefix() {
         assert_eq!(strip_heading_prefix("# Title"), "Title");
         assert_eq!(strip_heading_prefix("## Subtitle"), "Subtitle");
-        assert_eq!(strip_heading_prefix("###### Small Heading"), "Small Heading");
-        assert_eq!(strip_heading_prefix("####### Too many hashes"), "####### Too many hashes");
+        assert_eq!(
+            strip_heading_prefix("###### Small Heading"),
+            "Small Heading"
+        );
+        assert_eq!(
+            strip_heading_prefix("####### Too many hashes"),
+            "####### Too many hashes"
+        );
         assert_eq!(strip_heading_prefix("No hash"), "No hash");
     }
 
@@ -1089,7 +1109,10 @@ mod tests {
     fn test_strip_markdown_formatting() {
         let md = "# Heading 1\n- Item 1\n1. Numbered\n**Bold** and ~~Strike~~ and `code`";
         let cleaned = strip_markdown_formatting(md);
-        assert_eq!(cleaned, "Heading 1\nItem 1\nNumbered\nBold and Strike and code");
+        assert_eq!(
+            cleaned,
+            "Heading 1\nItem 1\nNumbered\nBold and Strike and code"
+        );
     }
 
     #[test]
@@ -1137,14 +1160,20 @@ mod tests {
             tab.perform(text_editor::Action::Edit(text_editor::Edit::Insert('a')));
         }
         let typing_duration = start_type.elapsed();
-        println!("BASELINE: Typing 500 chars into 5000 lines: {:?}", typing_duration);
+        println!(
+            "BASELINE: Typing 500 chars into 5000 lines: {:?}",
+            typing_duration
+        );
 
         // Benchmark count matches (case-insensitive)
         let start_find = Instant::now();
         let matches = tab.count_matches("brown", false);
         let find_duration = start_find.elapsed();
         assert_eq!(matches, 5000);
-        println!("BASELINE: Case-insensitive find in 5000 lines: {:?}", find_duration);
+        println!(
+            "BASELINE: Case-insensitive find in 5000 lines: {:?}",
+            find_duration
+        );
 
         // Benchmark format_with_commas
         let start_commas = Instant::now();
@@ -1152,6 +1181,9 @@ mod tests {
             let _ = format_with_commas(i * 123);
         }
         let commas_duration = start_commas.elapsed();
-        println!("BASELINE: format_with_commas 10,000 iterations: {:?}", commas_duration);
+        println!(
+            "BASELINE: format_with_commas 10,000 iterations: {:?}",
+            commas_duration
+        );
     }
 }

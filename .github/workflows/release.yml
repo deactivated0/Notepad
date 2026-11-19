@@ -4,47 +4,182 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag/version name (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build (${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
+  build-linux-x86_64:
+    name: Build Linux (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Create Native Tarball
+        run: |
+          mkdir -p package/notepad-v1.0.0-linux-x86_64
+          cp target/x86_64-unknown-linux-gnu/release/notepad package/notepad-v1.0.0-linux-x86_64/
+          cp README.md package/notepad-v1.0.0-linux-x86_64/
+          cd package
+          tar -czf ../notepad-v1.0.0-linux-x86_64.tar.gz notepad-v1.0.0-linux-x86_64
+          cd ..
+          sha256sum notepad-v1.0.0-linux-x86_64.tar.gz > notepad-v1.0.0-linux-x86_64.tar.gz.sha256
+
+      - name: Build AppImage
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp target/x86_64-unknown-linux-gnu/release/notepad AppDir/usr/bin/notepad
+          cp assets/icon_256.png AppDir/notepad.png
+          cp assets/icon_256.png AppDir/.DirIcon
+
+          cat << 'EOF' > AppDir/notepad.desktop
+          [Desktop Entry]
+          Type=Application
+          Name=Notepad
+          GenericName=Text Editor
+          Comment=A fast, lightweight, and modern text editor built with Rust and Iced
+          Exec=notepad %F
+          Icon=notepad
+          Terminal=false
+          Categories=Utility;TextEditor;Development;
+          MimeType=text/plain;text/markdown;text/x-rust;
+          StartupWMClass=notepad
+          EOF
+
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/notepad" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          curl -sSL -L -o appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir Notepad-v1.0.0-x86_64.AppImage
+          sha256sum Notepad-v1.0.0-x86_64.AppImage > Notepad-v1.0.0-x86_64.AppImage.sha256
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: |
+            notepad-v1.0.0-linux-x86_64.tar.gz*
+            Notepad-v1.0.0-x86_64.AppImage*
+
+  build-linux-cross:
+    name: Build Linux (${{ matrix.target }})
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact_name: notepad
-            asset_name: notepad-v1.0.0-x86_64-unknown-linux-gnu.tar.gz
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact_name: notepad
-            asset_name: notepad-v1.0.0-aarch64-unknown-linux-gnu.tar.gz
-          - target: x86_64-apple-darwin
-            os: macos-13
-            artifact_name: notepad
-            asset_name: notepad-v1.0.0-x86_64-apple-darwin.tar.gz
-          - target: aarch64-apple-darwin
-            os: macos-14
-            artifact_name: notepad
-            asset_name: notepad-v1.0.0-aarch64-apple-darwin.tar.gz
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact_name: notepad.exe
-            asset_name: notepad-v1.0.0-x86_64-pc-windows-msvc.zip
+            arch: arm64
+            pkg_arch: aarch64
+            gcc_pkg: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            linker: aarch64-linux-gnu-gcc
+            pkg_config_path: /usr/lib/aarch64-linux-gnu/pkgconfig
+            asset_prefix: notepad-v1.0.0-linux-aarch64
+          - target: i686-unknown-linux-gnu
+            arch: i386
+            pkg_arch: i686
+            gcc_pkg: gcc-multilib g++-multilib
+            linker: gcc
+            pkg_config_path: /usr/lib/i386-linux-gnu/pkgconfig
+            asset_prefix: notepad-v1.0.0-linux-i686
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armhf
+            pkg_arch: armv7
+            gcc_pkg: gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            linker: arm-linux-gnueabihf-gcc
+            pkg_config_path: /usr/lib/arm-linux-gnueabihf/pkgconfig
+            asset_prefix: notepad-v1.0.0-linux-armv7
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Add architecture and install cross libraries
         run: |
+          sudo dpkg --add-architecture ${{ matrix.arch }}
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev
+          sudo apt-get install -y ${{ matrix.gcc_pkg }} \
+            libxkbcommon-dev:${{ matrix.arch }} \
+            libwayland-dev:${{ matrix.arch }} \
+            libgl1-mesa-dev:${{ matrix.arch }} \
+            libx11-dev:${{ matrix.arch }} \
+            libxcursor-dev:${{ matrix.arch }} \
+            libxi-dev:${{ matrix.arch }} \
+            libxrandr-dev:${{ matrix.arch }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        env:
+          PKG_CONFIG_ALLOW_CROSS: "1"
+          PKG_CONFIG_PATH: ${{ matrix.pkg_config_path }}
+        run: |
+          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+          export CARGO_TARGET_${TARGET_UPPER}_LINKER="${{ matrix.linker }}"
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package native tarball
+        run: |
+          mkdir -p package/${{ matrix.asset_prefix }}
+          cp target/${{ matrix.target }}/release/notepad package/${{ matrix.asset_prefix }}/
+          cp README.md package/${{ matrix.asset_prefix }}/
+          cd package
+          tar -czf ../${{ matrix.asset_prefix }}.tar.gz ${{ matrix.asset_prefix }}
+          cd ..
+          sha256sum ${{ matrix.asset_prefix }}.tar.gz > ${{ matrix.asset_prefix }}.tar.gz.sha256
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.pkg_arch }}
+          path: |
+            ${{ matrix.asset_prefix }}.tar.gz*
+
+  build-windows:
+    name: Build Windows (${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            asset_name: notepad-v1.0.0-windows-x86_64.zip
+          - target: i686-pc-windows-msvc
+            asset_name: notepad-v1.0.0-windows-i686.zip
+          - target: aarch64-pc-windows-msvc
+            asset_name: notepad-v1.0.0-windows-arm64.zip
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -54,35 +189,74 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package archive (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar -czf ../../../${{ matrix.asset_name }} ${{ matrix.artifact_name }}
-          cd ../../..
-
       - name: Package archive (Windows)
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/${{ matrix.artifact_name }} -DestinationPath ${{ matrix.asset_name }}
+          mkdir -p package
+          Copy-Item target/${{ matrix.target }}/release/notepad.exe package/
+          Copy-Item README.md package/
+          Compress-Archive -Path package/* -DestinationPath ${{ matrix.asset_name }}
+          Get-FileHash -Algorithm SHA256 ${{ matrix.asset_name }} | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | Out-File -Encoding ascii "${{ matrix.asset_name }}.sha256"
 
-      - name: Generate Checksum
-        shell: bash
-        run: |
-          sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
-
-      - name: Upload Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
+          name: windows-${{ matrix.target }}
           path: |
-            ${{ matrix.asset_name }}
-            ${{ matrix.asset_name }}.sha256
+            ${{ matrix.asset_name }}*
+
+  build-macos:
+    name: Build macOS (Universal + Targets)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - name: Build Apple Silicon (aarch64)
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Build Intel (x86_64)
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Create Universal Binary & Packages
+        run: |
+          mkdir -p dist/universal dist/arm64 dist/x86_64
+
+          # Universal binary
+          lipo -create -output dist/universal/notepad \
+            target/aarch64-apple-darwin/release/notepad \
+            target/x86_64-apple-darwin/release/notepad
+
+          cp README.md dist/universal/
+          tar -czf notepad-v1.0.0-macos-universal.tar.gz -C dist/universal notepad README.md
+          sha256sum notepad-v1.0.0-macos-universal.tar.gz > notepad-v1.0.0-macos-universal.tar.gz.sha256
+
+          # Apple Silicon standalone
+          cp target/aarch64-apple-darwin/release/notepad dist/arm64/
+          cp README.md dist/arm64/
+          tar -czf notepad-v1.0.0-macos-arm64.tar.gz -C dist/arm64 notepad README.md
+          sha256sum notepad-v1.0.0-macos-arm64.tar.gz > notepad-v1.0.0-macos-arm64.tar.gz.sha256
+
+          # Intel standalone
+          cp target/x86_64-apple-darwin/release/notepad dist/x86_64/
+          cp README.md dist/x86_64/
+          tar -czf notepad-v1.0.0-macos-x86_64.tar.gz -C dist/x86_64 notepad README.md
+          sha256sum notepad-v1.0.0-macos-x86_64.tar.gz > notepad-v1.0.0-macos-x86_64.tar.gz.sha256
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-all
+          path: |
+            notepad-v1.0.0-macos-*.tar.gz*
 
   publish:
     name: Publish Release
-    needs: build
+    needs: [build-linux-x86_64, build-linux-cross, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,9 +267,19 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Create GitHub Release
+      - name: Determine tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
           files: artifacts/*
           draft: false
           prerelease: false

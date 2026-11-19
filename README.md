@@ -52,17 +52,23 @@ Features native Windows 11 Fluent aesthetics, sub-millisecond typing latency, mu
 
 ## Releases
 
-Pre-compiled production binaries for all major operating systems and architectures are available on the [**GitHub Releases Page**](https://github.com/deactivated0/Notepad/releases).
+Pre-compiled production binaries for all supported operating systems and architectures are available on the [**GitHub Releases Page**](https://github.com/deactivated0/Notepad/releases).
 
-| Platform | Target Architecture | Package |
+| Platform | Architecture / Target | Package Format |
 | :--- | :--- | :--- |
-| **Linux** | `x86_64-unknown-linux-gnu` | `.tar.gz`, `.deb`, standalone binary |
-| **Linux (ARM64)** | `aarch64-unknown-linux-gnu` | `.tar.gz`, standalone binary |
-| **macOS (Apple Silicon)** | `aarch64-apple-darwin` | `.tar.gz`, `.dmg` |
-| **macOS (Intel)** | `x86_64-apple-darwin` | `.tar.gz`, `.dmg` |
-| **Windows** | `x86_64-pc-windows-msvc` | `.zip`, `.msi`, `.exe` |
+| **Linux (x86_64)** | `x86_64-unknown-linux-gnu` | [**AppImage**](https://github.com/deactivated0/Notepad/releases) (Standalone), `.tar.gz` (Native Tarball) |
+| **Linux (ARM64)** | `aarch64-unknown-linux-gnu` | `.tar.gz` (Native Tarball) |
+| **Linux (i686 32-bit)** | `i686-unknown-linux-gnu` | `.tar.gz` (Native Tarball) |
+| **Linux (ARMv7)** | `armv7-unknown-linux-gnueabihf` | `.tar.gz` (Native Tarball) |
+| **Windows (x64)** | `x86_64-pc-windows-msvc` | `.zip` (Portable 64-bit) |
+| **Windows (x86 32-bit)**| `i686-pc-windows-msvc` | `.zip` (Portable 32-bit) |
+| **Windows (ARM64)** | `aarch64-pc-windows-msvc` | `.zip` (Portable ARM64) |
+| **macOS (Universal)** | `universal` (Apple Silicon + Intel) | `.tar.gz` (Universal App Bundle) |
+| **macOS (Apple Silicon)**| `aarch64-apple-darwin` | `.tar.gz` (M1/M2/M3/M4) |
+| **macOS (Intel)** | `x86_64-apple-darwin` | `.tar.gz` (Intel x86_64) |
+| **FreeBSD** | `x86_64-unknown-freebsd` | `.tar.gz` (Native Tarball) |
 
-SHA256 checksums are provided with each release asset for cryptographic verification.
+SHA256 checksums are provided alongside all release assets for integrity verification.
 
 ---
 
@@ -70,14 +76,25 @@ SHA256 checksums are provided with each release asset for cryptographic verifica
 
 ### Linux
 
-#### Universal Linux (Pre-built Binary)
-Download the latest pre-compiled archive from [Releases](https://github.com/deactivated0/Notepad/releases):
+#### Standalone AppImage (Universal Linux)
+Run Notepad without any installation on any modern Linux distribution:
 ```bash
-# Download and extract the latest release
-curl -sSL https://github.com/deactivated0/Notepad/releases/latest/download/notepad-v1.0.0-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+# 1. Download AppImage
+curl -sSLO https://github.com/deactivated0/Notepad/releases/latest/download/Notepad-v1.0.0-x86_64.AppImage
 
-# Install to system path
-sudo install -m 755 notepad /usr/local/bin/notepad
+# 2. Make executable and launch
+chmod +x Notepad-v1.0.0-x86_64.AppImage
+./Notepad-v1.0.0-x86_64.AppImage
+```
+
+#### Native Tarball (All Architectures)
+Download and extract the native archive for your architecture (`x86_64`, `aarch64`, `i686`, or `armv7`):
+```bash
+# Example for x86_64
+curl -sSL https://github.com/deactivated0/Notepad/releases/latest/download/notepad-v1.0.0-linux-x86_64.tar.gz | tar -xz
+
+# Install binary to system path
+sudo install -m 755 notepad-v1.0.0-linux-x86_64/notepad /usr/local/bin/notepad
 ```
 
 #### Arch Linux / Manjaro

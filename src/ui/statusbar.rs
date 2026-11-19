@@ -38,9 +38,7 @@ pub fn view<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
     .style(theme::statusbar_button(p))
     .on_press(Message::ToggleFormattedView);
 
-    let file_type_lbl = text(tab.file_type.label)
-        .size(11.5)
-        .color(p.text_secondary);
+    let file_type_lbl = text(tab.file_type.label).size(11.5).color(p.text_secondary);
 
     let zoom_btn = button(
         text(format!("{}%", app.zoom_percent))

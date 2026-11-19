@@ -1,6 +1,6 @@
 use iced::widget::{
-    button, column, container, mouse_area, pick_list, row, rule, scrollable, space, stack, text,
-    text_input, toggler, Column,
+    Column, button, column, container, mouse_area, pick_list, row, rule, scrollable, space, stack,
+    text, text_input, toggler,
 };
 use iced::{Alignment, Element, Length, Padding};
 
@@ -258,10 +258,13 @@ pub fn find_replace_bar<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a
 /// Floating Windows 11 Fluent Settings Flyout (anchored to top-right gear icon).
 pub fn settings_flyout<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a, Message> {
     let header = row![
-        text("Settings").size(15).font(iced::Font {
-            weight: iced::font::Weight::Semibold,
-            ..iced::Font::DEFAULT
-        }).color(p.text_primary),
+        text("Settings")
+            .size(15)
+            .font(iced::Font {
+                weight: iced::font::Weight::Semibold,
+                ..iced::Font::DEFAULT
+            })
+            .color(p.text_primary),
         space::horizontal(),
         button(
             container(icons::close(12.0, p.text_secondary))
@@ -349,10 +352,13 @@ pub fn settings_flyout<'a>(app: &'a NotepadApp, p: FluentPalette) -> Element<'a,
     );
 
     let about_sec = column![
-        text("Notepad v1.0.0").size(12).font(iced::Font {
-            weight: iced::font::Weight::Medium,
-            ..iced::Font::DEFAULT
-        }).color(p.text_secondary),
+        text("Notepad v1.0.0")
+            .size(12)
+            .font(iced::Font {
+                weight: iced::font::Weight::Medium,
+                ..iced::Font::DEFAULT
+            })
+            .color(p.text_secondary),
     ]
     .spacing(2)
     .padding(Padding::from([8, 14]));
