@@ -199,6 +199,15 @@ pub enum FormatAction {
     ClearFormatting,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LastEditOp {
+    None,
+    InsertChar(char),
+    Backspace,
+    Delete,
+    Bulk,
+}
+
 /// A single open document tab with O(1) cached status metrics.
 pub struct Tab {
     pub id: usize,
@@ -219,6 +228,8 @@ pub struct Tab {
     // Bounded undo/redo snapshot stacks.
     undo_stack: VecDeque<String>,
     redo_stack: VecDeque<String>,
+    last_edit: LastEditOp,
+    consecutive_typing_count: u16,
 }
 
 impl Tab {
@@ -242,6 +253,8 @@ impl Tab {
             cursor_col: 1,
             undo_stack: VecDeque::with_capacity(MAX_UNDO_HISTORY),
             redo_stack: VecDeque::with_capacity(MAX_UNDO_HISTORY),
+            last_edit: LastEditOp::None,
+            consecutive_typing_count: 0,
         };
         tab.recompute_metrics();
         tab
@@ -259,19 +272,88 @@ impl Tab {
         self.title = new_title;
     }
 
-    /// Performs a `text_editor::Action` while keeping metrics cached and undo stack bounded.
+    /// Performs a `text_editor::Action` with O(1) metrics updates and intelligent undo chunking.
     pub fn perform(&mut self, action: text_editor::Action) {
         let is_edit = action.is_edit();
         if is_edit {
-            self.push_undo_snapshot();
-        }
+            let cursor = self.content.cursor();
+            let has_selection = cursor.selection.is_some();
 
-        self.content.perform(action);
+            // Intelligent undo grouping (coalesce consecutive typing into logical words)
+            let should_snapshot = match &action {
+                text_editor::Action::Edit(text_editor::Edit::Insert(c)) => {
+                    if has_selection || self.undo_stack.is_empty() {
+                        true
+                    } else if c.is_whitespace() {
+                        true
+                    } else if !matches!(self.last_edit, LastEditOp::InsertChar(_)) {
+                        true
+                    } else {
+                        self.consecutive_typing_count >= 24
+                    }
+                }
+                text_editor::Action::Edit(text_editor::Edit::Backspace) => {
+                    has_selection || !matches!(self.last_edit, LastEditOp::Backspace) || self.undo_stack.is_empty()
+                }
+                text_editor::Action::Edit(text_editor::Edit::Delete) => {
+                    has_selection || !matches!(self.last_edit, LastEditOp::Delete) || self.undo_stack.is_empty()
+                }
+                _ => true,
+            };
 
-        if is_edit {
+            if should_snapshot {
+                self.push_undo_snapshot();
+                self.consecutive_typing_count = 0;
+            }
+
+            match &action {
+                text_editor::Action::Edit(text_editor::Edit::Insert(c)) => {
+                    self.last_edit = LastEditOp::InsertChar(*c);
+                    self.consecutive_typing_count = self.consecutive_typing_count.saturating_add(1);
+                }
+                text_editor::Action::Edit(text_editor::Edit::Backspace) => {
+                    self.last_edit = LastEditOp::Backspace;
+                }
+                text_editor::Action::Edit(text_editor::Edit::Delete) => {
+                    self.last_edit = LastEditOp::Delete;
+                }
+                _ => {
+                    self.last_edit = LastEditOp::Bulk;
+                    self.consecutive_typing_count = 0;
+                }
+            }
+
+            // O(1) fast-path metric updates for single-character edits without selection
+            let can_fast_path = !has_selection;
+            match &action {
+                text_editor::Action::Edit(text_editor::Edit::Insert(c))
+                    if can_fast_path && *c != '\n' =>
+                {
+                    self.content.perform(action);
+                    self.is_dirty = true;
+                    self.char_count += 1;
+                    self.char_count_formatted = format_with_commas(self.char_count);
+                    self.update_cursor_only();
+                    return;
+                }
+                text_editor::Action::Edit(text_editor::Edit::Backspace)
+                    if can_fast_path && cursor.position.column > 0 =>
+                {
+                    self.content.perform(action);
+                    self.is_dirty = true;
+                    self.char_count = self.char_count.saturating_sub(1);
+                    self.char_count_formatted = format_with_commas(self.char_count);
+                    self.update_cursor_only();
+                    return;
+                }
+                _ => {}
+            }
+
+            self.content.perform(action);
             self.is_dirty = true;
             self.recompute_metrics();
         } else {
+            self.content.perform(action);
             self.update_cursor_only();
         }
     }
@@ -286,10 +368,16 @@ impl Tab {
     pub fn recompute_metrics(&mut self) {
         let mut count = 0usize;
         for line in self.content.lines() {
-            count += line.text.chars().count();
+            count += if line.text.is_ascii() {
+                line.text.len()
+            } else {
+                line.text.chars().count()
+            };
         }
-        self.char_count = count;
-        self.char_count_formatted = format_with_commas(count);
+        if count != self.char_count || self.char_count_formatted.is_empty() {
+            self.char_count = count;
+            self.char_count_formatted = format_with_commas(count);
+        }
         self.update_cursor_only();
     }
 
@@ -710,17 +798,41 @@ impl Tab {
         self.line_ending.normalize(&self.content.text())
     }
 
-    /// Counts occurrences of `query` in the document.
+    /// Counts occurrences of `query` in the document with zero full-document clones.
     pub fn count_matches(&self, query: &str, match_case: bool) -> usize {
         if query.is_empty() {
             return 0;
         }
-        let haystack = self.content.text();
+        let mut total = 0;
         if match_case {
-            haystack.matches(query).count()
+            for line in self.content.lines() {
+                total += line.text.matches(query).count();
+            }
+        } else if query.is_ascii() {
+            let query_lower = query.to_ascii_lowercase();
+            let needle = query_lower.as_bytes();
+            for line in self.content.lines() {
+                let bytes = line.text.as_bytes();
+                if bytes.len() >= needle.len() {
+                    let mut i = 0;
+                    while i + needle.len() <= bytes.len() {
+                        if bytes[i..i + needle.len()].eq_ignore_ascii_case(needle) {
+                            total += 1;
+                            i += needle.len();
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
+            }
         } else {
-            haystack.to_lowercase().matches(&query.to_lowercase()).count()
+            let query_lower = query.to_lowercase();
+            for line in self.content.lines() {
+                let line_lower = line.text.to_lowercase();
+                total += line_lower.matches(&query_lower).count();
+            }
         }
+        total
     }
 
     /// Replaces the first or all occurrences of `query` with `replacement`.
@@ -738,11 +850,14 @@ impl Tab {
         let (updated, count) = if match_case {
             if all {
                 let c = source.matches(query).count();
+                if c == 0 {
+                    return 0;
+                }
                 (source.replace(query, replacement), c)
             } else if source.contains(query) {
                 (source.replacen(query, replacement, 1), 1)
             } else {
-                (source, 0)
+                return 0;
             }
         } else {
             replace_case_insensitive(&source, query, replacement, all)
@@ -757,31 +872,73 @@ impl Tab {
         count
     }
 
-    /// Moves the cursor to the N-th (0-based) match of `query`.
+    /// Moves the cursor to the N-th (0-based) match of `query` without full document string copies.
     pub fn jump_to_match(&mut self, query: &str, match_case: bool, index: usize) {
         if query.is_empty() {
             return;
         }
-        let text = self.content.text();
-        let positions: Vec<usize> = if match_case {
-            text.match_indices(query).map(|(idx, _)| idx).collect()
-        } else {
-            text.to_lowercase()
-                .match_indices(&query.to_lowercase())
-                .map(|(idx, _)| idx)
-                .collect()
-        };
+        let total = self.count_matches(query, match_case);
+        if total == 0 {
+            return;
+        }
+        let target_match = index % total;
+        let mut current_match = 0;
+        let mut target_pos: Option<(usize, usize)> = None;
 
-        if let Some(&byte_idx) = positions.get(index % positions.len().max(1)) {
-            let prefix = &text[..byte_idx.min(text.len())];
-            let line = prefix.matches('\n').count();
-            let col = prefix
-                .rsplit('\n')
-                .next()
-                .map(|s| s.chars().count())
-                .unwrap_or(0);
+        let query_lower = if match_case {
+            String::new()
+        } else {
+            query.to_lowercase()
+        };
+        let is_ascii_search = !match_case && query.is_ascii();
+
+        'outer: for (line_idx, line) in self.content.lines().enumerate() {
+            let line_text = line.text;
+            if match_case {
+                for (byte_offset, _) in line_text.match_indices(query) {
+                    if current_match == target_match {
+                        let col = line_text[..byte_offset].chars().count();
+                        target_pos = Some((line_idx, col));
+                        break 'outer;
+                    }
+                    current_match += 1;
+                }
+            } else if is_ascii_search {
+                let bytes = line_text.as_bytes();
+                let needle = query_lower.as_bytes();
+                let mut offset = 0;
+                while offset + needle.len() <= bytes.len() {
+                    if bytes[offset..offset + needle.len()].eq_ignore_ascii_case(needle) {
+                        if current_match == target_match {
+                            let col = line_text[..offset].chars().count();
+                            target_pos = Some((line_idx, col));
+                            break 'outer;
+                        }
+                        current_match += 1;
+                        offset += needle.len();
+                    } else {
+                        offset += 1;
+                    }
+                }
+            } else {
+                let line_lower = line_text.to_lowercase();
+                for (byte_offset, _) in line_lower.match_indices(&query_lower) {
+                    if current_match == target_match {
+                        let col = line_text
+                            .char_indices()
+                            .take_while(|&(b_idx, _)| b_idx < byte_offset)
+                            .count();
+                        target_pos = Some((line_idx, col));
+                        break 'outer;
+                    }
+                    current_match += 1;
+                }
+            }
+        }
+
+        if let Some((line, column)) = target_pos {
             self.content.move_to(text_editor::Cursor {
-                position: text_editor::Position { line, column: col },
+                position: text_editor::Position { line, column },
                 selection: None,
             });
             self.update_cursor_only();
@@ -789,26 +946,35 @@ impl Tab {
     }
 }
 
-pub fn format_with_commas(n: usize) -> String {
-    let s = n.to_string();
-    let mut out = String::with_capacity(s.len() + s.len() / 3);
-    for (i, ch) in s.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            out.push(',');
-        }
-        out.push(ch);
+pub fn format_with_commas(mut n: usize) -> String {
+    if n == 0 {
+        return "0".to_string();
     }
-    out.chars().rev().collect()
+    let mut buf = [0u8; 32];
+    let mut pos = 32;
+    let mut count = 0;
+
+    while n > 0 {
+        if count > 0 && count % 3 == 0 {
+            pos -= 1;
+            buf[pos] = b',';
+        }
+        pos -= 1;
+        buf[pos] = b'0' + (n % 10) as u8;
+        n /= 10;
+        count += 1;
+    }
+
+    // Safety: buf[pos..32] contains only ASCII '0'..'9' and ','
+    let s = unsafe { std::str::from_utf8_unchecked(&buf[pos..32]) };
+    s.to_string()
 }
 
 fn strip_heading_prefix(s: &str) -> &str {
+    let bytes = s.as_bytes();
     let mut count = 0;
-    for ch in s.chars() {
-        if ch == '#' {
-            count += 1;
-        } else {
-            break;
-        }
+    while count < bytes.len() && bytes[count] == b'#' {
+        count += 1;
     }
     if count > 0 && count <= 6 {
         s[count..].trim_start()
@@ -818,29 +984,46 @@ fn strip_heading_prefix(s: &str) -> &str {
 }
 
 fn strip_markdown_formatting(input: &str) -> String {
-    input
-        .lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            let stripped = strip_heading_prefix(trimmed);
-            let stripped = if let Some(rest) = stripped.strip_prefix("- ").or_else(|| stripped.strip_prefix("* ")) {
-                rest
-            } else if let Some(pos) = stripped.find(". ") {
-                if stripped[..pos].chars().all(|c| c.is_ascii_digit()) {
-                    &stripped[pos + 2..]
-                } else {
-                    stripped
-                }
+    let mut out = String::with_capacity(input.len());
+    let mut first = true;
+
+    for line in input.lines() {
+        if !first {
+            out.push('\n');
+        }
+        first = false;
+
+        let trimmed = line.trim_start();
+        let stripped = strip_heading_prefix(trimmed);
+        let stripped = if let Some(rest) = stripped.strip_prefix("- ").or_else(|| stripped.strip_prefix("* ")) {
+            rest
+        } else if let Some(pos) = stripped.find(". ") {
+            if stripped[..pos].bytes().all(|b| b.is_ascii_digit()) {
+                &stripped[pos + 2..]
             } else {
                 stripped
-            };
+            }
+        } else {
             stripped
-                .replace("**", "")
-                .replace("~~", "")
-                .replace('`', "")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+        };
+
+        let mut chars = stripped.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '*' && chars.peek() == Some(&'*') {
+                chars.next();
+                continue;
+            }
+            if ch == '~' && chars.peek() == Some(&'~') {
+                chars.next();
+                continue;
+            }
+            if ch == '`' {
+                continue;
+            }
+            out.push(ch);
+        }
+    }
+    out
 }
 
 fn replace_case_insensitive(
@@ -849,9 +1032,14 @@ fn replace_case_insensitive(
     replacement: &str,
     all: bool,
 ) -> (String, usize) {
+    if needle.is_empty() {
+        return (haystack.to_string(), 0);
+    }
+
     let lower_haystack = haystack.to_lowercase();
     let lower_needle = needle.to_lowercase();
-    if lower_needle.is_empty() {
+
+    if !lower_haystack.contains(&lower_needle) {
         return (haystack.to_string(), 0);
     }
 
@@ -874,6 +1062,10 @@ fn replace_case_insensitive(
         if !all {
             break;
         }
+    }
+
+    if count == 0 {
+        return (haystack.to_string(), 0);
     }
 
     result.push_str(&haystack[last_end..]);
@@ -928,5 +1120,38 @@ mod tests {
         // Applying bold again unwraps it
         tab.apply_format(FormatAction::Bold);
         assert_eq!(tab.content.text(), "hello");
+    }
+
+    #[test]
+    fn test_benchmark_baseline() {
+        use std::time::Instant;
+
+        // 1. Create a 5,000-line document
+        let sample_line = "The quick brown fox jumps over the lazy dog. 1234567890\n";
+        let doc_text = sample_line.repeat(5000);
+        let mut tab = Tab::new(1, "benchmark.txt", &doc_text);
+
+        // Benchmark typing 500 characters
+        let start_type = Instant::now();
+        for _ in 0..500 {
+            tab.perform(text_editor::Action::Edit(text_editor::Edit::Insert('a')));
+        }
+        let typing_duration = start_type.elapsed();
+        println!("BASELINE: Typing 500 chars into 5000 lines: {:?}", typing_duration);
+
+        // Benchmark count matches (case-insensitive)
+        let start_find = Instant::now();
+        let matches = tab.count_matches("brown", false);
+        let find_duration = start_find.elapsed();
+        assert_eq!(matches, 5000);
+        println!("BASELINE: Case-insensitive find in 5000 lines: {:?}", find_duration);
+
+        // Benchmark format_with_commas
+        let start_commas = Instant::now();
+        for i in 1..=10_000 {
+            let _ = format_with_commas(i * 123);
+        }
+        let commas_duration = start_commas.elapsed();
+        println!("BASELINE: format_with_commas 10,000 iterations: {:?}", commas_duration);
     }
 }
